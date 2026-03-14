@@ -434,6 +434,7 @@ document.body.addEventListener('pointerdown', function (e) {
     var dist = Math.hypot(me.clientX - startX, me.clientY - startY);
     if (dist > THRESHOLD) {
       isDragging = true;
+      document.body.style.cursor = 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M3 21 L3 17 L17 3 L21 7 L7 21 Z\' fill=\'white\' stroke=\'%23888\' stroke-width=\'1\' stroke-linejoin=\'round\'/%3E%3Cpath d=\'M1 23 L3 17 L7 21 Z\' fill=\'%23ccc\' stroke=\'%23888\' stroke-width=\'0.5\'/%3E%3Cpath d=\'M14 6 L18 10\' stroke=\'%23aaa\' stroke-width=\'0.5\'/%3E%3C/svg%3E") 1 23, auto';
 
       var coalesced = (me.getCoalescedEvents && me.getCoalescedEvents()) || [me];
       for (var ci = 0; ci < coalesced.length; ci++) {
@@ -489,6 +490,7 @@ document.body.addEventListener('pointerdown', function (e) {
     currentHitPath = null;
     points = [];
     isDragging = false;
+    document.body.style.cursor = '';
   }
 
   document.addEventListener('pointermove', onMove);
