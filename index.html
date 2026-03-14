@@ -306,6 +306,8 @@
 
   // ── Freehand Drawing (SVG path) ───────────────────────────────────
 
+  var MIN_POINT_DIST = 5;
+
   function buildPathD(pts) {
     if (pts.length < 2) return '';
     var d = 'M ' + pts[0].x + ' ' + pts[0].y;
@@ -313,10 +315,13 @@
       d += ' L ' + pts[1].x + ' ' + pts[1].y;
       return d;
     }
+    var mx = (pts[0].x + pts[1].x) / 2;
+    var my = (pts[0].y + pts[1].y) / 2;
+    d += ' L ' + mx + ' ' + my;
     for (var i = 1; i < pts.length - 1; i++) {
-      var mx = (pts[i].x + pts[i + 1].x) / 2;
-      var my = (pts[i].y + pts[i + 1].y) / 2;
-      d += ' Q ' + pts[i].x + ' ' + pts[i].y + ' ' + mx + ' ' + my;
+      var mx2 = (pts[i].x + pts[i + 1].x) / 2;
+      var my2 = (pts[i].y + pts[i + 1].y) / 2;
+      d += ' Q ' + pts[i].x + ' ' + pts[i].y + ' ' + mx2 + ' ' + my2;
     }
     var last = pts[pts.length - 1];
     d += ' L ' + last.x + ' ' + last.y;
@@ -405,7 +410,13 @@
       var dist = Math.hypot(me.clientX - startX, me.clientY - startY);
       if (dist > THRESHOLD) {
         isDragging = true;
-        points.push({ x: me.clientX, y: me.clientY });
+        var last = points[points.length - 1];
+        var pd = Math.hypot(me.clientX - last.x, me.clientY - last.y);
+        if (pd >= MIN_POINT_DIST) {
+          points.push({ x: me.clientX, y: me.clientY });
+        } else {
+          return;
+        }
 
         if (!currentGroup) {
           currentGroup = document.createElementNS(svgNS, 'g');
