@@ -87,8 +87,8 @@ const svgNS = 'http://www.w3.org/2000/svg';
 const STROKE_OPTIONS = {
   size: 4,
   thinning: 0,
-  smoothing: 0.5,
-  streamline: 0.5,
+  smoothing: 0.7,
+  streamline: 0.7,
   simulatePressure: false,
 };
 
@@ -101,6 +101,24 @@ let points = [];
 let selectedStroke = null;
 let selectionBox = null;
 let undoStack = [];
+
+// ── Point pre-filtering ───────────────────────────────────────────
+
+const SMOOTH_WINDOW = 8;
+
+function smoothPoints(raw) {
+  if (raw.length <= SMOOTH_WINDOW) return raw;
+  var result = raw.slice(0, SMOOTH_WINDOW);
+  for (var i = SMOOTH_WINDOW; i < raw.length; i++) {
+    var sx = 0, sy = 0;
+    for (var j = 0; j < SMOOTH_WINDOW; j++) {
+      sx += raw[i - j][0];
+      sy += raw[i - j][1];
+    }
+    result.push([sx / SMOOTH_WINDOW, sy / SMOOTH_WINDOW]);
+  }
+  return result;
+}
 
 // ── perfect-freehand rendering ────────────────────────────────────
 
@@ -434,7 +452,7 @@ document.body.addEventListener('mousedown', function (e) {
         svgLayer.appendChild(currentGroup);
       }
 
-      var outlinePoints = getStroke(points, { ...STROKE_OPTIONS, last: false });
+      var outlinePoints = getStroke(smoothPoints(points), { ...STROKE_OPTIONS, last: false });
       currentPath.setAttribute('d', getSvgPathFromStroke(outlinePoints));
       currentHitPath.setAttribute('d', buildHitPathD(points));
     }
@@ -449,7 +467,7 @@ document.body.addEventListener('mousedown', function (e) {
     } else if (currentGroup && points.length < 3) {
       currentGroup.remove();
     } else if (currentGroup) {
-      var outlinePoints = getStroke(points, { ...STROKE_OPTIONS, last: true });
+      var outlinePoints = getStroke(smoothPoints(points), { ...STROKE_OPTIONS, last: true });
       currentPath.setAttribute('d', getSvgPathFromStroke(outlinePoints));
       undoStack.push({ type: 'stroke', el: currentGroup });
     }
