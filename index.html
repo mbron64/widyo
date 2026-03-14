@@ -96,6 +96,7 @@ let currentPath = null;
 let currentHitPath = null;
 let points = [];
 let selectedStroke = null;
+let selectedTextBlock = null;
 let selectionBox = null;
 let undoStack = [];
 let redoStack = [];
@@ -203,19 +204,48 @@ function buildHitPathD(pts) {
   return d;
 }
 
-// ── Stroke Selection ──────────────────────────────────────────────
+// ── Selection ─────────────────────────────────────────────────────
 
-function deselectStroke() {
-  selectedStroke = null;
+function removeSelectionBox() {
   if (selectionBox) {
     selectionBox.remove();
     selectionBox = null;
   }
 }
 
+function createSelectionBox() {
+  removeSelectionBox();
+  var box = document.createElement('div');
+  box.className = 'selection-box';
+  ['nw', 'ne', 'sw', 'se'].forEach(function (corner) {
+    var handle = document.createElement('div');
+    handle.className = 'selection-handle ' + corner;
+    handle.dataset.corner = corner;
+    box.appendChild(handle);
+  });
+  document.body.appendChild(box);
+  selectionBox = box;
+  return box;
+}
+
+function deselectStroke() {
+  selectedStroke = null;
+  if (selectedTextBlock) {
+    selectedTextBlock.contentEditable = 'true';
+    selectedTextBlock.style.userSelect = 'text';
+    selectedTextBlock.style.webkitUserSelect = 'text';
+    selectedTextBlock = null;
+  }
+  removeSelectionBox();
+}
+
 function positionSelectionBox() {
-  if (!selectedStroke || !selectionBox) return;
-  var rect = selectedStroke.getBoundingClientRect();
+  if (!selectionBox) return;
+  var el = selectedStroke || selectedTextBlock;
+  if (!el) return;
+  var rect = selectedStroke
+    ? selectedStroke.getBoundingClientRect()
+    : selectedTextBlock.getBoundingClientRect();
   var pad = 2;
   selectionBox.style.left = (rect.left - pad) + 'px';
   selectionBox.style.top = (rect.top - pad) + 'px';
@@ -226,19 +256,17 @@ function positionSelectionBox() {
 function selectStroke(pathEl) {
   deselectStroke();
   selectedStroke = pathEl;
+  createSelectionBox();
+  positionSelectionBox();
+}
 
-  var box = document.createElement('div');
-  box.className = 'selection-box';
-
-  ['nw', 'ne', 'sw', 'se'].forEach(function (corner) {
-    var handle = document.createElement('div');
-    handle.className = 'selection-handle ' + corner;
-    handle.dataset.corner = corner;
-    box.appendChild(handle);
-  });
-
-  document.body.appendChild(box);
-  selectionBox = box;
+function selectTextBlock(block) {
+  deselectStroke();
+  selectedTextBlock = block;
+  block.contentEditable = 'false';
+  block.style.userSelect = 'none';
+  block.style.webkitUserSelect = 'none';
+  createSelectionBox();
   positionSelectionBox();
 }
 
@@ -251,9 +279,15 @@ let resizeStartMouse = {};
 let resizeStartBox = {};
 let resizeBaseTranslate = { x: 0, y: 0 };
 let resizeUndoSnapshot = null;
+let resizingText = false;
+let resizeTextStartFontSize = 16;
+let resizeTextStartDiag = 0;
+let resizeTextUndoSnapshot = null;
 
 document.addEventListener('mousedown', function (e) {
-  if (e.target.classList.contains('selection-handle') && selectedStroke) {
+  if (!e.target.classList.contains('selection-handle')) return;
+
+  if (selectedStroke) {
     e.preventDefault();
     e.stopPropagation();
     resizing = true;
@@ -280,10 +314,32 @@ document.addEventListener('mousedown', function (e) {
     else if (resizeCorner === 'ne') resizeOrigin = { x: bbox.x, y: bbox.y + bbox.height };
     else if (resizeCorner === 'sw') resizeOrigin = { x: bbox.x + bbox.width, y: bbox.y };
     else resizeOrigin = { x: bbox.x, y: bbox.y };
+  } else if (selectedTextBlock) {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingText = true;
+    resizeStartMouse = { x: e.clientX, y: e.clientY };
+    var rect = selectedTextBlock.getBoundingClientRect();
+    resizeTextStartDiag = Math.hypot(rect.width, rect.height);
+    resizeTextStartFontSize = parseFloat(window.getComputedStyle(selectedTextBlock).fontSize);
+    resizeTextUndoSnapshot = { el: selectedTextBlock, fontSize: resizeTextStartFontSize };
   }
 }, true);
 
 document.addEventListener('mousemove', function (e) {
+  if (resizingText && selectedTextBlock) {
+    const dx = e.clientX - resizeStartMouse.x;
+    const dy = e.clientY - resizeStartMouse.y;
+    const dragDist = Math.hypot(dx, dy);
+    var sign = (dx + dy) > 0 ? 1 : -1;
+    var newDiag = resizeTextStartDiag + sign * dragDist;
+    var scale = Math.max(0.25, newDiag / resizeTextStartDiag);
+    var newSize = Math.max(4, Math.round(resizeTextStartFontSize * scale));
+    selectedTextBlock.style.fontSize = newSize + 'px';
+    positionSelectionBox();
+    return;
+  }
+
   if (!resizing || !selectedStroke) return;
 
   const dx = e.clientX - resizeStartMouse.x;
@@ -307,6 +363,12 @@ document.addEventListener('mousemove', function (e) {
   scaleX = Math.max(0.1, scaleX);
   scaleY = Math.max(0.1, scaleY);
 
+  if (e.shiftKey) {
+    var uniform = Math.max(scaleX, scaleY);
+    scaleX = uniform;
+    scaleY = uniform;
+  }
+
   var g = selectedStroke.closest('g');
 
   var ox = resizeOrigin.x;
@@ -325,6 +387,15 @@ document.addEventListener('mousemove', function (e) {
 });
 
 document.addEventListener('mouseup', function () {
+  if (resizingText) {
+    if (resizeTextUndoSnapshot && selectedTextBlock) {
+      redoStack.length = 0;
+      undoStack.push({ type: 'resize-text', el: resizeTextUndoSnapshot.el, fontSize: resizeTextUndoSnapshot.fontSize });
+    }
+    resizingText = false;
+    resizeTextUndoSnapshot = null;
+    positionSelectionBox();
+  }
   if (resizing) {
     if (selectedStroke) {
       var g = selectedStroke.closest('g');
@@ -458,14 +529,31 @@ function applyUndoRedo(action) {
     action.el.style.top = action.top + 'px';
     action.el.style.maxWidth = (window.innerWidth - action.left - 4) + 'px';
     return { type: 'move-text', el: action.el, left: curLeft, top: curTop };
+  } else if (action.type === 'resize-text') {
+    var curSize = parseFloat(action.el.style.fontSize) || 16;
+    action.el.style.fontSize = action.fontSize + 'px';
+    return { type: 'resize-text', el: action.el, fontSize: curSize };
+  } else if (action.type === 'delete-text') {
+    document.body.appendChild(action.el);
+    return { type: 'redo-delete-text', el: action.el };
+  } else if (action.type === 'redo-delete-text') {
+    if (action.el.parentNode) action.el.remove();
+    return { type: 'delete-text', el: action.el };
+  } else if (action.type === 'text-edit') {
+    var curHTML = action.el.innerHTML;
+    action.el.innerHTML = action.html;
+    return { type: 'text-edit', el: action.el, html: curHTML };
   }
   return null;
 }
 
 document.addEventListener('keydown', function (e) {
   if (document.activeElement && document.activeElement.contentEditable === 'true') {
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !document.activeElement.textContent.trim()) {
-      document.activeElement.blur();
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault();
+      if (!document.activeElement.textContent.trim()) {
+        document.activeElement.blur();
+      }
     } else {
       return;
     }
@@ -487,19 +575,27 @@ document.addEventListener('keydown', function (e) {
     return;
   }
 
-  if (!selectedStroke) return;
-
   if (e.key === 'Delete' || e.key === 'Backspace') {
-    e.preventDefault();
-    var group = selectedStroke.closest('g');
-    if (group) {
-      group.remove();
+    if (selectedTextBlock) {
+      e.preventDefault();
       redoStack.length = 0;
-      undoStack.push({ type: 'delete-stroke', el: group });
-    } else {
-      selectedStroke.remove();
+      undoStack.push({ type: 'delete-text', el: selectedTextBlock });
+      selectedTextBlock.remove();
+      deselectStroke();
+      return;
     }
-    deselectStroke();
+    if (selectedStroke) {
+      e.preventDefault();
+      var group = selectedStroke.closest('g');
+      if (group) {
+        group.remove();
+        redoStack.length = 0;
+        undoStack.push({ type: 'delete-stroke', el: group });
+      } else {
+        selectedStroke.remove();
+      }
+      deselectStroke();
+    }
   }
 });
 
@@ -513,39 +609,148 @@ function createTextBlock(x, y) {
   block.style.top = y + 'px';
   block.style.maxWidth = (window.innerWidth - x - 4) + 'px';
 
-  var blockStartX, blockStartY, blockOrigLeft, blockOrigTop, blockDragging = false;
+  var lastClickTime = 0;
+  var lastSavedHTML = '';
+  var textEditTimer = null;
+
+  function saveTextSnapshot() {
+    var curHTML = block.innerHTML;
+    if (curHTML !== lastSavedHTML) {
+      redoStack.length = 0;
+      undoStack.push({ type: 'text-edit', el: block, html: lastSavedHTML });
+      lastSavedHTML = curHTML;
+    }
+  }
+
+  block.addEventListener('input', function () {
+    clearTimeout(textEditTimer);
+    textEditTimer = setTimeout(saveTextSnapshot, 400);
+  });
+
+  block.addEventListener('focus', function () {
+    lastSavedHTML = block.innerHTML;
+  });
 
   block.addEventListener('mousedown', function (ev) {
     ev.stopPropagation();
+
+    if (block.contentEditable === 'true' && document.activeElement === block) {
+      var now = Date.now();
+      var timeSinceLast = now - lastClickTime;
+      lastClickTime = now;
+
+      if (timeSinceLast < 400) return;
+
+      var caretNear = false;
+      var sel = window.getSelection();
+      if (sel && sel.rangeCount) {
+        var range = sel.getRangeAt(0);
+        var caretRect = range.getBoundingClientRect();
+        if (caretRect && caretRect.width === 0) {
+          var hDist = Math.abs(ev.clientX - caretRect.left);
+          var pad = 10;
+          var inVertical = ev.clientY >= caretRect.top - pad && ev.clientY <= caretRect.bottom + pad;
+          if (hDist < 20 && inVertical) caretNear = true;
+        }
+      }
+      if (!caretNear) return;
+
+      var focStartX = ev.clientX, focStartY = ev.clientY;
+      var focDragged = false;
+      function focMove(fm) {
+        if (Math.hypot(fm.clientX - focStartX, fm.clientY - focStartY) > THRESHOLD) {
+          focDragged = true;
+          document.removeEventListener('mousemove', focMove);
+          document.removeEventListener('mouseup', focUp);
+        }
+      }
+      function focUp() {
+        document.removeEventListener('mousemove', focMove);
+        document.removeEventListener('mouseup', focUp);
+        if (!focDragged) {
+          block.blur();
+          block.contentEditable = 'false';
+          selectTextBlock(block);
+        }
+      }
+      document.addEventListener('mousemove', focMove);
+      document.addEventListener('mouseup', focUp);
+      return;
+    }
+
+    if (selectedTextBlock === block) {
+      ev.preventDefault();
+      var selStartX = ev.clientX, selStartY = ev.clientY;
+      var selOrigLeft = parseInt(block.style.left);
+      var selOrigTop = parseInt(block.style.top);
+      var selDragging = false;
+      function selMove(sm) {
+        if (Math.hypot(sm.clientX - selStartX, sm.clientY - selStartY) > THRESHOLD) {
+          selDragging = true;
+          document.body.classList.add('grabbing');
+          block.style.left = (selOrigLeft + sm.clientX - selStartX) + 'px';
+          block.style.top = (selOrigTop + sm.clientY - selStartY) + 'px';
+          block.style.maxWidth = (window.innerWidth - parseInt(block.style.left) - 4) + 'px';
+          positionSelectionBox();
+        }
+      }
+      function selUp() {
+        document.removeEventListener('mousemove', selMove);
+        document.removeEventListener('mouseup', selUp);
+        document.body.classList.remove('grabbing');
+        if (!selDragging) {
+          lastClickTime = Date.now();
+          block.contentEditable = 'true';
+          block.style.userSelect = 'text';
+          block.style.webkitUserSelect = 'text';
+          block.focus();
+          removeSelectionBox();
+          selectedTextBlock = null;
+        } else {
+          redoStack.length = 0;
+          undoStack.push({ type: 'move-text', el: block, left: selOrigLeft, top: selOrigTop });
+          positionSelectionBox();
+        }
+      }
+      document.addEventListener('mousemove', selMove);
+      document.addEventListener('mouseup', selUp);
+      return;
+    }
+
+    var bStartX = ev.clientX, bStartY = ev.clientY;
+    var bOrigLeft = parseInt(block.style.left);
+    var bOrigTop = parseInt(block.style.top);
+    var bDragging = false;
+
     deselectStroke();
 
-    blockStartX = ev.clientX;
-    blockStartY = ev.clientY;
-    blockOrigLeft = parseInt(block.style.left);
-    blockOrigTop = parseInt(block.style.top);
-    blockDragging = false;
-
     function onMove(me) {
-      var dist = Math.hypot(me.clientX - blockStartX, me.clientY - blockStartY);
+      var dist = Math.hypot(me.clientX - bStartX, me.clientY - bStartY);
       if (dist > THRESHOLD) {
-        blockDragging = true;
-        block.blur();
-        block.style.cursor = 'grabbing';
-        block.style.left = (blockOrigLeft + me.clientX - blockStartX) + 'px';
-        block.style.top = (blockOrigTop + me.clientY - blockStartY) + 'px';
+        bDragging = true;
+        document.body.classList.add('grabbing');
+        block.style.left = (bOrigLeft + me.clientX - bStartX) + 'px';
+        block.style.top = (bOrigTop + me.clientY - bStartY) + 'px';
         block.style.maxWidth = (window.innerWidth - parseInt(block.style.left) - 4) + 'px';
+        if (selectedTextBlock === block) positionSelectionBox();
       }
     }
 
     function onUp() {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      block.style.cursor = '';
-      if (!blockDragging) {
+      document.body.classList.remove('grabbing');
+      if (!bDragging) {
+        lastClickTime = Date.now();
+        block.contentEditable = 'true';
+        block.style.userSelect = 'text';
+        block.style.webkitUserSelect = 'text';
         block.focus();
       } else {
         redoStack.length = 0;
-        undoStack.push({ type: 'move-text', el: block, left: blockOrigLeft, top: blockOrigTop });
+        undoStack.push({ type: 'move-text', el: block, left: bOrigLeft, top: bOrigTop });
+        if (selectedTextBlock !== block) selectTextBlock(block);
+        else positionSelectionBox();
       }
     }
 
@@ -554,7 +759,13 @@ function createTextBlock(x, y) {
   });
 
   block.addEventListener('blur', function () {
+    clearTimeout(textEditTimer);
+    saveTextSnapshot();
     if (!block.textContent.trim()) {
+      if (selectedTextBlock === block) {
+        selectedTextBlock = null;
+        removeSelectionBox();
+      }
       block.remove();
     }
   });
