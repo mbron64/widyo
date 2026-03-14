@@ -13,6 +13,7 @@
     cursor: text;
     user-select: none;
     -webkit-user-select: none;
+    touch-action: none;
   }
 
   #svg-layer {
@@ -410,9 +411,9 @@ function createTextBlock(x, y) {
   undoStack.push({ type: 'text', el: block });
 }
 
-// ── Main Gesture Handler (body mousedown) ─────────────────────────
+// ── Main Gesture Handler (body pointerdown) ───────────────────────
 
-document.body.addEventListener('mousedown', function (e) {
+document.body.addEventListener('pointerdown', function (e) {
   if (e.target.classList.contains('text-block')) return;
   if (e.target.classList.contains('selection-handle')) return;
   if (e.target.tagName === 'path') return;
@@ -425,7 +426,7 @@ document.body.addEventListener('mousedown', function (e) {
   currentGroup = null;
   currentPath = null;
   currentHitPath = null;
-  points = [[e.clientX, e.clientY]];
+  points = [];
 
   deselectStroke();
 
@@ -433,7 +434,11 @@ document.body.addEventListener('mousedown', function (e) {
     var dist = Math.hypot(me.clientX - startX, me.clientY - startY);
     if (dist > THRESHOLD) {
       isDragging = true;
-      points.push([me.clientX, me.clientY]);
+
+      var coalesced = (me.getCoalescedEvents && me.getCoalescedEvents()) || [me];
+      for (var ci = 0; ci < coalesced.length; ci++) {
+        points.push([coalesced[ci].clientX, coalesced[ci].clientY]);
+      }
 
       if (!currentGroup) {
         currentGroup = document.createElementNS(svgNS, 'g');
@@ -453,8 +458,8 @@ document.body.addEventListener('mousedown', function (e) {
   }
 
   function onUp() {
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
 
     if (!isDragging) {
       createTextBlock(startX, startY);
@@ -473,8 +478,8 @@ document.body.addEventListener('mousedown', function (e) {
     isDragging = false;
   }
 
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onUp);
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
 });
 </script>
 </body>
