@@ -76,6 +76,8 @@ The entire app is a single `index.html` file of vanilla HTML, CSS, and JavaScrip
 ### Privacy
 
 - No accounts or sign-ups
+- No tracking of your content
+- No training AI models on your work
 - Nothing stored outside your device
 - Saved files work offline, forever
 - Completely private by design
