@@ -1291,6 +1291,59 @@ document.addEventListener('keydown', function (e) {
     return;
   }
 
+  if ((e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') &&
+      (selectedStroke || selectedTextBlock || multiSelected.length)) {
+    e.preventDefault();
+    var step = e.shiftKey ? 10 : 1;
+    var dx = 0, dy = 0;
+    if (e.key === 'ArrowLeft') dx = -step;
+    else if (e.key === 'ArrowRight') dx = step;
+    else if (e.key === 'ArrowUp') dy = -step;
+    else if (e.key === 'ArrowDown') dy = step;
+
+    if (multiSelected.length) {
+      var snapshots = multiSelected.map(function (item) {
+        if (item.type === 'text') {
+          var oL = parseInt(item.el.style.left), oT = parseInt(item.el.style.top);
+          item.el.style.left = (oL + dx) + 'px';
+          item.el.style.top = (oT + dy) + 'px';
+          updateTextMaxWidth(item.el);
+          return { type: 'text', el: item.el, left: oL, top: oT };
+        } else {
+          var g = item.el;
+          var vp = g.querySelector('path.visible'), hp = g.querySelector('path.hit-target');
+          var snap = { type: 'stroke', el: g, visD: vp ? vp.getAttribute('d') : '', hitD: hp ? hp.getAttribute('d') : '', state: JSON.parse(JSON.stringify(getTransformState(g))) };
+          var st = getTransformState(g);
+          applyTransform(g, { tx: st.tx + dx, ty: st.ty + dy, sx: st.sx, sy: st.sy, sox: st.sox, soy: st.soy });
+          bakeTransform(g);
+          return snap;
+        }
+      });
+      redoStack.length = 0;
+      undoStack.push({ type: 'multi-move', items: snapshots });
+      positionMultiSelectBox();
+    } else if (selectedTextBlock) {
+      var oL = parseInt(selectedTextBlock.style.left), oT = parseInt(selectedTextBlock.style.top);
+      selectedTextBlock.style.left = (oL + dx) + 'px';
+      selectedTextBlock.style.top = (oT + dy) + 'px';
+      updateTextMaxWidth(selectedTextBlock);
+      redoStack.length = 0;
+      undoStack.push({ type: 'move-text', el: selectedTextBlock, left: oL, top: oT });
+      positionSelectionBox();
+    } else if (selectedStroke) {
+      var g = selectedStroke.closest('g');
+      var vp = g.querySelector('path.visible'), hp = g.querySelector('path.hit-target');
+      var snap = { type: 'transform', el: g, visD: vp ? vp.getAttribute('d') : '', hitD: hp ? hp.getAttribute('d') : '', state: JSON.parse(JSON.stringify(getTransformState(g))) };
+      var st = getTransformState(g);
+      applyTransform(g, { tx: st.tx + dx, ty: st.ty + dy, sx: st.sx, sy: st.sy, sox: st.sox, soy: st.soy });
+      bakeTransform(g);
+      redoStack.length = 0;
+      undoStack.push(snap);
+      positionSelectionBox();
+    }
+    return;
+  }
+
   if ((selectedStroke || selectedTextBlock) && !e.ctrlKey && !e.metaKey && e.key.length === 1) {
     e.preventDefault();
     colorBuffer += e.key;
