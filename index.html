@@ -119,6 +119,22 @@
     pointer-events: all;
     cursor: grab;
   }
+  .save-toast {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255, 255, 255, 0.7);
+    font-family: monospace;
+    font-size: 14px;
+    padding: 8px 20px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    pointer-events: none;
+    z-index: 10;
+    opacity: 1;
+    transition: opacity 0.4s;
+  }
   #hint {
     position: absolute;
     top: 50%;
@@ -1153,7 +1169,7 @@ document.addEventListener('keydown', function (e) {
         clearTimeout(colorBufferTimer);
         colorBuffer = '';
       }
-    } else {
+    } else if (!((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'o'))) {
       return;
     }
   }
@@ -1171,6 +1187,44 @@ document.addEventListener('keydown', function (e) {
     if (!redoStack.length) return;
     var reverse = applyUndoRedo(redoStack.pop());
     if (reverse) undoStack.push(reverse);
+    return;
+  }
+
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault();
+    deselectStroke();
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    var transient = document.querySelectorAll('.selection-box, .multi-select-box, .select-rect, .save-toast');
+    transient.forEach(function (el) { el.remove(); });
+    var html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+    var blob = new Blob([html], { type: 'text/html' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'widyo-save.html';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast('saved');
+    return;
+  }
+
+  if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+    e.preventDefault();
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.html';
+    input.style.display = 'none';
+    input.addEventListener('change', function () {
+      if (!input.files.length) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        loadSavedContent(reader.result);
+        showToast('loaded');
+      };
+      reader.readAsText(input.files[0]);
+      input.remove();
+    });
+    document.body.appendChild(input);
+    input.click();
     return;
   }
 
@@ -1262,16 +1316,9 @@ document.addEventListener('keydown', function (e) {
 
 // ── Text Block Creation ───────────────────────────────────────────
 
-function createTextBlock(x, y) {
-  var block = document.createElement('div');
-  block.className = 'text-block';
-  block.contentEditable = 'true';
-  block.style.left = x + 'px';
-  block.style.top = y + 'px';
-  block.style.maxWidth = (window.innerWidth - x - 4) + 'px';
-
+function attachTextBlockHandlers(block) {
   var lastClickTime = 0;
-  var lastSavedHTML = '';
+  var lastSavedHTML = block.innerHTML || '';
   var textEditTimer = null;
 
   function saveTextSnapshot() {
@@ -1440,7 +1487,16 @@ function createTextBlock(x, y) {
       updateHint();
     }
   });
+}
 
+function createTextBlock(x, y) {
+  var block = document.createElement('div');
+  block.className = 'text-block';
+  block.contentEditable = 'true';
+  block.style.left = x + 'px';
+  block.style.top = y + 'px';
+  block.style.maxWidth = (window.innerWidth - x - 4) + 'px';
+  attachTextBlockHandlers(block);
   deselectStroke();
   document.body.appendChild(block);
   block.focus();
@@ -1448,6 +1504,46 @@ function createTextBlock(x, y) {
   undoStack.push({ type: 'text', el: block });
   updateHint();
 }
+
+// ── Save / Open helpers ──────────────────────────────────────────
+function showToast(msg) {
+  var el = document.createElement('div');
+  el.className = 'save-toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(function () { el.style.opacity = '0'; }, 1200);
+  setTimeout(function () { el.remove(); }, 1600);
+}
+
+function loadSavedContent(htmlString) {
+  var parser = new DOMParser();
+  var doc = parser.parseFromString(htmlString, 'text/html');
+  var importedSvg = doc.getElementById('svg-layer');
+  if (importedSvg) {
+    importedSvg.querySelectorAll('g').forEach(function (g) {
+      svgLayer.appendChild(document.adoptNode(g));
+      var vp = g.querySelector('path.visible');
+      if (vp) syncHitTargetPointerEvents(vp);
+    });
+  }
+  doc.querySelectorAll('.text-block').forEach(function (block) {
+    var adopted = document.adoptNode(block);
+    adopted.contentEditable = 'false';
+    document.body.appendChild(adopted);
+    attachTextBlockHandlers(adopted);
+  });
+  updateHint();
+}
+
+// ── Rehydrate saved content on load ───────────────────────────────
+document.querySelectorAll('.text-block').forEach(function (block) {
+  block.contentEditable = 'false';
+  attachTextBlockHandlers(block);
+});
+svgLayer.querySelectorAll('g path.visible').forEach(function (vp) {
+  syncHitTargetPointerEvents(vp);
+});
+updateHint();
 
 // ── Main Gesture Handler (body pointerdown) ───────────────────────
 
@@ -1854,6 +1950,20 @@ document.body.addEventListener('pointerdown', function (e) {
 
   document.addEventListener('pointermove', onMove);
   document.addEventListener('pointerup', onUp);
+});
+
+// ── Drag-and-drop file loading ───────────────────────────────────
+document.body.addEventListener('dragover', function (e) { e.preventDefault(); });
+document.body.addEventListener('drop', function (e) {
+  e.preventDefault();
+  var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!file || !file.name.endsWith('.html')) return;
+  var reader = new FileReader();
+  reader.onload = function () {
+    loadSavedContent(reader.result);
+    showToast('loaded');
+  };
+  reader.readAsText(file);
 });
 </script>
 </body>
