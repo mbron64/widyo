@@ -1233,9 +1233,14 @@ document.addEventListener('keydown', function (e) {
         undoStack.push({ type: 'color-change', el: selectedStroke, prop: prop, prevValue: prevColor });
       } else if (selectedTextBlock) {
         var prevColor = selectedTextBlock.style.color || '';
+        var prevHTML = selectedTextBlock.innerHTML;
         selectedTextBlock.style.color = appliedColor;
+        selectedTextBlock.querySelectorAll('[style]').forEach(function (child) {
+          child.style.color = '';
+          if (!child.getAttribute('style')) child.removeAttribute('style');
+        });
         redoStack.length = 0;
-        undoStack.push({ type: 'color-change', el: selectedTextBlock, prop: 'color', prevValue: prevColor });
+        undoStack.push({ type: 'text-edit', el: selectedTextBlock, html: prevHTML });
       }
       clearTimeout(colorBufferTimer);
       colorBuffer = '';
@@ -1324,7 +1329,19 @@ function createTextBlock(x, y) {
     }
 
     if (selectedTextBlock === block) {
+      var timeSinceLast = Date.now() - lastClickTime;
+      if (timeSinceLast < 400) {
+        lastClickTime = Date.now();
+        block.contentEditable = 'true';
+        block.style.userSelect = 'text';
+        block.style.webkitUserSelect = 'text';
+        block.focus();
+        removeSelectionBox();
+        selectedTextBlock = null;
+        return;
+      }
       ev.preventDefault();
+      lastClickTime = Date.now();
       var selStartX = ev.clientX, selStartY = ev.clientY;
       var selOrigLeft = parseInt(block.style.left);
       var selOrigTop = parseInt(block.style.top);
@@ -1387,10 +1404,7 @@ function createTextBlock(x, y) {
       document.body.classList.remove('grabbing');
       if (!bDragging) {
         lastClickTime = Date.now();
-        block.contentEditable = 'true';
-        block.style.userSelect = 'text';
-        block.style.webkitUserSelect = 'text';
-        block.focus();
+        selectTextBlock(block);
       } else {
         redoStack.length = 0;
         undoStack.push({ type: 'move-text', el: block, left: bOrigLeft, top: bOrigTop });
