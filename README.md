@@ -22,7 +22,7 @@
 
 ## What is this?
 
-widyo (write it down yo) is a deliberately minimal creative canvas. Click to type. Drag to draw. Move and resize anything. There are no toolbars, no menus, no save buttons, no settings. The constraint is the feature.
+widyo (write it down yo) is a deliberately minimal creative canvas. Click to type. Drag to draw. Move and resize anything. Save your work as a self-contained HTML file and reopen it later. There are no toolbars, no menus, no settings. The constraint is the feature.
 
 ### Use it for
 
@@ -54,10 +54,19 @@ The entire app is a single `index.html` file of vanilla HTML, CSS, and JavaScrip
 |---|---|
 | Click on empty space | A text block is created -- start typing |
 | Click-drag on empty space | Draw a freehand stroke |
-| Click on existing text | Resume editing that block |
-| Click near caret, then click again | Select the text block (resize/move handles appear) |
+| Shift+drag | Draw a perfect shape (line, circle, triangle, rectangle) |
 | Click on a drawing | Select it (resize/move handles appear) |
+| Click on a text block | Select it (resize/move handles appear) |
+| Double-click a text block | Enter edit mode (cursor inside text) |
+| Right-click drag | Multi-select elements for group move, resize, or delete |
 | Drag corner handles | Resize drawings or change text font size |
+| Drag mid-edge handles | Resize text block width |
+| Type a color name while selected | Change the element's color (e.g. type `red`, `light blue`, `#ff0`) |
+| Type `fill` + color on a shape | Fill the shape interior (e.g. `fill red`) |
+| Highlight text, then type a color | Change just the highlighted text's color |
+| Cmd+S / Ctrl+S | Save and download the canvas as a working HTML file |
+| Cmd+O / Ctrl+O | Open a previously saved widyo file |
+| Drag and drop a .html file | Load a saved canvas into the current session |
 | Cmd+Z / Cmd+Shift+Z | Undo / redo everything |
 | Delete / Backspace | Remove selected element |
 
@@ -81,10 +90,7 @@ Contributions are welcome. widyo's philosophy is radical simplicity -- every fea
 
 ### Ideas welcome
 
-- Touch/mobile and stylus support
-- Persistence via localStorage
 - Export to image/PDF
-- Customizable colors/fonts via URL params
 - Collaboration via WebRTC
 
 Open an [issue](https://github.com/mbron64/widyo/issues) to discuss before building anything large.
