@@ -615,6 +615,15 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener('scroll', repositionBoxes);
 }
 
+function syncHitTargetPointerEvents(visPath) {
+  var g = visPath.closest('g');
+  if (!g) return;
+  var ht = g.querySelector('path.hit-target');
+  if (!ht) return;
+  var hasFill = visPath.style.fill && visPath.style.fill !== 'none';
+  ht.style.pointerEvents = hasFill ? 'all' : '';
+}
+
 function selectStroke(pathEl) {
   deselectStroke();
   selectedStroke = pathEl;
@@ -1035,6 +1044,7 @@ function applyUndoRedo(action) {
   } else if (action.type === 'color-change') {
     var cur = action.el.style[action.prop];
     action.el.style[action.prop] = action.prevValue;
+    if (action.prop === 'fill') syncHitTargetPointerEvents(action.el);
     return { type: 'color-change', el: action.el, prop: action.prop, prevValue: cur };
   } else if (action.type === 'multi-move') {
     var reverseItems = action.items.map(function (item) {
@@ -1229,6 +1239,7 @@ document.addEventListener('keydown', function (e) {
         var prop = isFill ? 'fill' : 'stroke';
         var prevColor = selectedStroke.style[prop] || '';
         selectedStroke.style[prop] = appliedColor;
+        if (isFill) syncHitTargetPointerEvents(selectedStroke);
         redoStack.length = 0;
         undoStack.push({ type: 'color-change', el: selectedStroke, prop: prop, prevValue: prevColor });
       } else if (selectedTextBlock) {
