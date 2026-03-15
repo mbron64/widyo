@@ -22,7 +22,7 @@
 
 ## What is this?
 
-widyo (write it down yo) is a deliberately minimal creative canvas. Click to type. Drag to draw. Move and resize anything. There are no toolbars, no menus, no settings. The constraint is the feature.
+widyo (write it down yo) is a deliberately minimal creative canvas. Click to type. Drag to draw. Move and resize anything. There are no toolbars, no menus, no settings.
 
 **Your work never leaves your device.** There's no sign-up, no cloud, nothing stored anywhere but your own computer. When you save, widyo downloads a single file with everything in it. Open it anytime, anywhere, even offline. It's yours.
 
